@@ -3058,7 +3058,8 @@ nvGpuOpsBuildExternalAllocPtes
     NvBool      isIndirectPeerSupported,
     NvBool      isPeerSupported,
     NvU32       peerId,
-    gpuExternalMappingInfo *pGpuExternalMappingInfo
+    gpuExternalMappingInfo *pGpuExternalMappingInfo,
+    RmPhysAddr bar1BusAddr
 )
 {
     NV_STATUS               status              = NV_OK;
@@ -3253,7 +3254,11 @@ nvGpuOpsBuildExternalAllocPtes
         if (nvFieldIsValid32(&pPteFmt->fldAtomicDisable.desc))
             nvFieldSetBool(&pPteFmt->fldAtomicDisable, !atomic, pte.v8);
 
-        gmmuFieldSetAperture(&pPteFmt->fldAperture, aperture, pte.v8);
+        if (aperture == GMMU_APERTURE_PEER) {
+            gmmuFieldSetAperture(&pPteFmt->fldAperture, GMMU_APERTURE_SYS_NONCOH, pte.v8);
+        } else {
+            gmmuFieldSetAperture(&pPteFmt->fldAperture, aperture, pte.v8);
+        }
 
         if (!isCompressedKind)
         {
@@ -3264,38 +3269,8 @@ nvGpuOpsBuildExternalAllocPtes
         }
     }
 
-    if (aperture == GMMU_APERTURE_PEER)
-    {
-        FlaMemory* pFlaMemory = dynamicCast(pMemory, FlaMemory);
-        nvFieldSet32(&pPteFmt->fldPeerIndex, peerId, pte.v8);
-
-        //
-        // Any fabric memory descriptors are pre-encoded with the fabric base address
-        // use NVLINK_INVALID_FABRIC_ADDR to avoid encoding twice
-        //
-        // Skip fabric base address for Local EGM as it uses peer aperture but
-        // doesn't require fabric address
-        //
-        if (
-            (memdescGetAddressSpace(pMemDesc) == ADDR_FABRIC_MC) ||
-            (memdescGetAddressSpace(pMemDesc) == ADDR_FABRIC_V2) ||
-            (pFlaMemory != NULL) ||
-            (memdescIsEgm(pMemDesc) && (pMappingGpu == pMemDesc->pGpu)))
-        {
-            fabricBaseAddress = NVLINK_INVALID_FABRIC_ADDR;
-        }
-        else
-        {
-            KernelNvlink *pKernelNvlink = GPU_GET_KERNEL_NVLINK(pMemDesc->pGpu);
-            if (pKernelNvlink == NULL)
-            {
-                fabricBaseAddress = NVLINK_INVALID_FABRIC_ADDR;
-            }
-            else
-            {
-                fabricBaseAddress = knvlinkGetUniqueFabricBaseAddress(pMemDesc->pGpu, pKernelNvlink);
-            }
-        }
+    if (aperture == GMMU_APERTURE_PEER) {
+        fabricBaseAddress = bar1BusAddr;
     }
 
     //
@@ -3452,6 +3427,7 @@ NV_STATUS nvGpuOpsGetExternalAllocPtes(struct gpuAddressSpace *vaSpace,
     PMEMORY_DESCRIPTOR pMemDesc = NULL;
     OBJGPU *pMappingGpu = NULL;
     NvU32 peerId = 0;
+    RmPhysAddr bar1BusAddr = 0;
     NvBool isSliSupported = NV_FALSE;
     NvBool isPeerSupported = NV_FALSE;
     NvBool isIndirectPeerSupported = NV_FALSE;
@@ -3596,6 +3572,7 @@ NV_STATUS nvGpuOpsGetExternalAllocPtes(struct gpuAddressSpace *vaSpace,
                                                        &peerId);
             if (status != NV_OK)
                 goto freeGpaMemdesc;
+            bar1BusAddr = gpumgrGetGpuPhysFbAddr(pAdjustedMemDesc->pGpu);
         }
 
         //
@@ -3673,7 +3650,7 @@ NV_STATUS nvGpuOpsGetExternalAllocPtes(struct gpuAddressSpace *vaSpace,
 
     status = nvGpuOpsBuildExternalAllocPtes(pVAS, pMappingGpu, pAdjustedMemDesc, pMemory, offset, size,
                                             isIndirectPeerSupported, isPeerSupported, peerId,
-                                            pGpuExternalMappingInfo);
+                                            pGpuExternalMappingInfo, bar1BusAddr);
 
 freeGpaMemdesc:
     if (pAdjustedMemDesc != pMemDesc)
@@ -9322,7 +9299,7 @@ NV_STATUS nvGpuOpsGetChannelResourcePtes(struct gpuAddressSpace *vaSpace,
 
     status = nvGpuOpsBuildExternalAllocPtes(pVAS, pMappingGpu, pMemDesc, NULL,
                                             offset, size, NV_FALSE, NV_FALSE,
-                                            0, pGpuExternalMappingInfo);
+                                            0, pGpuExternalMappingInfo, 0);
 
     _nvGpuOpsLocksRelease(&acquiredLocks);
     threadStateFree(&threadState, THREAD_STATE_FLAGS_NONE);
