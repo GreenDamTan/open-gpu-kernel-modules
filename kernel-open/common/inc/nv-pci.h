@@ -26,6 +26,7 @@
 
 #include <linux/pci.h>
 #include "nv-linux.h"
+#include <linux/iommu.h>
 
 #define NV_GPU_BAR1 1
 #define NV_GPU_BAR3 3

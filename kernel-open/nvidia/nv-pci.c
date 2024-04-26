@@ -539,8 +539,14 @@ nv_pci_probe
                        NV_PCI_SLOT_NUMBER(pci_dev), PCI_FUNC(pci_dev->devfn));
             goto failed;
         }
-
-        if (pci_dev->dev.bus->iommu_ops == NULL) 
+//https://github.com/torvalds/linux/commit/75f74f85a42eb294b657f847c33e1bb7921dbec9
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(6,8,0)
+        if ((pci_dev->dev.iommu != NULL) &&
+            (pci_dev->dev.iommu->iommu_dev != NULL) &&
+            (pci_dev->dev.iommu->iommu_dev->ops == NULL))
+#else
+        if (pci_dev->dev.bus->iommu_ops == NULL)
+#endif
         {
             nv = NV_STATE_PTR(nvl);
             if (rm_is_iommu_needed_for_sriov(sp, nv))
