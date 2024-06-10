@@ -3,6 +3,12 @@
 This is the source release of the NVIDIA Linux open GPU kernel modules,
 version 550.90.07.
 
+## 说明
+自用的强行启用GPUDirect Peer to Peer (P2P)
+
+适用于RTX 4060ti等40系显卡
+
+GRID 17.2
 
 ## How to Build
 
